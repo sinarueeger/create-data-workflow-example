@@ -1,0 +1,103 @@
+---
+title: "Download & Process OpenSNP data"
+output: md_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This document is to create the data used for the workflow-example described [here](https://github.com/sinarueeger/workflow-example).
+
+## openSNP
+
+[https://opensnp.org](https://opensnp.org) is a platform where individuals can upload their genotype and phenotype data. 
+
+openSNP contains genotype data for over > individuals and information for ~ phenotypes (although not everyone filled out all phenotypes). 
+
+You can also check the FAQ [here](https://opensnp.org/faq)
+
+Some of the openSNP data has been made ready for direct download on [zenondo](https://zenodo.org/record/1442755#.W7SyBVJ9jUI) and we will use this data for our examples. 
+
+## Download data
+
+First, we need to download the OpenSNP and unzip the file. 
+
+```{r get-data, cache=TRUE}
+system("mkdir data")
+path.data <- here::here("data")
+system(glue::glue("wget https://zenodo.org/record/1442755/files/CrowdAI_v3.tar.gz?download=1 -O {path.data}/CrowdAI_v3.tar.gz"))
+system("tar -xzf {path.data}/CrowdAI_v3.tar.gz")
+```
+
+This will give us a folder structure
+
+```{r folder}
+cat(
+  system(
+    glue::glue(
+    "tree {path.data}/CrowdAI_v3"),
+    intern = TRUE),
+  sep = "\n"
+)
+```
+
+What we need from here are the files that are for `training` only, thats 785 individuals.
+<!----------- system("wc -l training_set_details.txt") --------->
+
+- `subset/genotyping_data_subset_training.vcf` and : genotype information for height associated SNPs for all individuals 
+- `training_set_details.txt`: phenotype information for all individuals (test and training set)
+
+
+## Data preprocessing
+
+The goal is to have
+1. a selection of genotypes: turn vcf to ped dosages, select only a subset of SNPs
+2. store phenotype and genotype information from 1. to txt files. 
+3. add the text files to the workflow example data folders. 
+
+
+```{r genotype-data}
+## the snps we select are in two regions, around one of the top SNPs associated with height: 
+## info from here: Supp table 2 (https://www.nature.com/articles/ng.3097#s2)
+
+
+## vcf to ped, you will need to use plink for this
+path.gt <- here::here("data","CrowdAI_v3","subset")
+path.out <- here::here("data")
+system(glue::glue("./bin/plink --vcf {path.gt}/genotyping_data_subset_train.vcf --recodeAD --out {path.out}/genotyping_data_subset_train --make-bed --chr 1 --from-kb 15000 --to-kb 20000 "))
+
+## this will generate plenty of files, but we only need the *fam, *bim, *bed extension.
+system(glue::glue("rm {path.out}/*fam"))
+system(glue::glue("rm {path.out}/*log"))
+system(glue::glue("rm {path.out}/*nosex"))
+system(glue::glue("rm {path.out}/*map"))
+system(glue::glue("rm {path.out}/*ped"))
+system(glue::glue("rm {path.out}/*bed"))
+
+## import the data
+#library(snpStats)
+#dat.gt <- read.plink(bed = glue::glue("{path.out}/genotyping_data_subset_train.bed"), 
+#           bim = glue::glue("{path.out}/genotyping_data_subset_train.bim"), 
+#           fam = glue::glue("{path.out}/genotyping_data_subset_train.fam"))
+
+```
+
+Lucky us, the phenotype data is already in the format that we can use it for further analyses. 
+
+```{r phenotype-data}
+path.pheno <- here::here("data","CrowdAI_v3")
+
+dat.pheno <- readr::read_delim(glue::glue("{path.pheno}/training_set_details.txt"), delim = " ")
+
+```
+
+Now we can store everything in a folder that we can copy.
+
+```{r output}
+system(glue::glue("mkdir {path.out}/out"))
+system(glue::glue("mv {path.out}/genotyping_data_subset_train.raw {path.out}/out/"))
+system(glue::glue("mv {path.out}/genotyping_data_subset_train.bim {path.out}/out/"))
+system(glue::glue("mv {path.pheno}/training_set_details.txt {path.out}/out/"))
+
+```
